@@ -30,7 +30,15 @@ def recognize(file_name) -> list:
 
     response = json.loads(smarty.vk_api(body))
     persons = response["body"]["objects"][0]["persons"]
-    return list(map(lambda person: remap.tag_to_name[person["tag"]], persons))
+    spirits = list()
+    for person in persons:
+        spirits.append(
+            {
+                'person': remap.tag_to_name[person["tag"]],
+                'coord': person["coord"]
+            }
+        )
+    return spirits
 
 
 def set(id, file_name):
@@ -73,8 +81,10 @@ def mark_visit(date=None):
     records = list()
     persons = recognize("../photo.jpg")
     for person in persons:
+        if person["person"] == 'UNDEFINED':
+            continue
         records.append({
-            "range": 'зарядки 2 семестр!' + column + str(find_name_index(person, values)),
+            "range": 'зарядки 2 семестр!' + column + str(find_name_index(person["person"], values)),
             "majorDimension": "ROWS",
             "values": [[1]],
         })
