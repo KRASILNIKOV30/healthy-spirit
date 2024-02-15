@@ -121,7 +121,7 @@ def vk_api(args):
     opts = opts_from_args(args)
 
     if args["path"]:
-        print(f"Sending image: {args["path"]}")
+        print(f"Sending image: {args['path']}")
         status_code, body = send_images(args["url"], meta, opts, [args["path"]], args["timeout"])
     elif args.dir:
         print("Sending images from directory: {}".format(args.dir))

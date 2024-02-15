@@ -2,6 +2,18 @@ import config
 import smarty
 import json
 import remap
+import httplib2
+from googleapiclient.discovery import build
+from oauth2client.service_account import ServiceAccountCredentials
+import datetime
+from converter import number_to_string
+import os
+
+
+def find_name_index(name, array):
+    for value in array:
+        if value and value[0] == name:
+            return array.index(value) + 1
 
 
 def recognize(file_name) -> list:
@@ -35,3 +47,43 @@ def set(id, file_name):
 
     response = json.loads(smarty.vk_api(body))
     return response
+
+
+def mark_visit(date=None):
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(
+        config.CREDENTIALS_FILE,
+        ['https://www.googleapis.com/auth/spreadsheets',
+         'https://www.googleapis.com/auth/drive'])
+    http_auth = credentials.authorize(httplib2.Http())
+    service = build('sheets', 'v4', http=http_auth)
+    values = service.spreadsheets().values().get(
+        spreadsheetId=config.spreadsheet_id,
+        range='зарядки 2 семестр!B1:ZZ69',
+        majorDimension='ROWS'
+    ).execute()['values']
+
+    if not date:
+        if os.name == 'nt':
+            date = datetime.datetime.now().strftime("%#d-%b-%Y")
+        else:
+            date = datetime.datetime.now().strftime("-%d-%b-%Y")
+
+    column = number_to_string(values[1].index(date) + 2)
+
+    records = list()
+    persons = recognize("../photo.jpg")
+    for person in persons:
+        records.append({
+            "range": 'зарядки 2 семестр!' + column + str(find_name_index(person, values)),
+            "majorDimension": "ROWS",
+            "values": [[1]],
+        })
+
+    service.spreadsheets().values().batchUpdate(
+        spreadsheetId=config.spreadsheet_id,
+        body={
+            "valueInputOption": "USER_ENTERED",
+            "data": records
+        }
+    ).execute()
+    return persons
