@@ -22,6 +22,8 @@ class Uploading(StatesGroup):
 
 @dp.message(default_state, Command("start"))
 async def start_handler(msg: Message, state: FSMContext):
+    if msg.from_user.id not in config.ADMIN_LIST:
+        return
     await msg.answer(text.greet.format(name=msg.from_user.full_name), reply_markup=make_upload_button())
     await state.set_state(Uploading.waiting_upload)
 
