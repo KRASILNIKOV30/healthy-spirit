@@ -77,6 +77,9 @@ async def document_handler(msg: Message, state: FSMContext):
         await msg.answer_photo(new_photo)
     except ValueError:
         await msg.answer("Возникла ошибка, попробуйте ещё раз ")
-    await state.set_state(Uploading.waiting_upload)
     os.remove("../new_photo.jpg")
     os.remove("../photo.jpg")
+    await msg.answer(
+        text="Отправьте дату вида 1-Jan-2024",
+        reply_markup=make_today_button())
+    await state.set_state(Uploading.waiting_date)
