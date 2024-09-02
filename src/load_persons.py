@@ -1,14 +1,16 @@
 import os
 import api
+import remap
 
-tree = list(os.walk('../res/additional_photos'))
+persons_dir = '../res/2024'
+
+tree = list(os.walk(persons_dir))
 files = tree[0][2]
 
-#i = 2
-#for file in files:
+i = len(remap.tag_to_name)
 
-    #print(api.set(i, f"../res/persons/{file}"))
-    #i += 1
+for file in files:
+    print(api.set(i, f"{persons_dir}/{file}"))
+    i += 1
 
-#print(api.set(28, '../res/additional_photos/Атюлов Игнат Васильевич.png'))
-print(api.recognize('../res/old_persons/bogdan_krasilnikov.png'))
+# print(api.recognize('../res/2022-2023/bogdan_krasilnikov.png'))

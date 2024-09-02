@@ -53,30 +53,27 @@ async def document_handler(msg: Message, state: FSMContext):
     with open("../photo.jpg", "wb") as f:
         f.write(response.content)
     user_data = await state.get_data()
-    try:
-        healthy_spirits_list = mark_visit(user_data['date'])
-        healthy_spirits_string = ''
-        undefined_counter = 0
-        for healthy_spirit in healthy_spirits_list:
-            if healthy_spirit["person"] == 'UNDEFINED':
-                undefined_counter += 1
-                continue
-            healthy_spirits_string += healthy_spirit["person"] + "\n"
-        healthy_spirits_recognized = len(healthy_spirits_list)
-        healthy_spirits_seen = healthy_spirits_recognized - undefined_counter
-        message = ("Люди, посетившие зарядку:\n\n"
-                   + healthy_spirits_string
-                   + "\n"
-                   + "Распознано: "
-                   + str(healthy_spirits_seen)
-                   + "/"
-                   + str(healthy_spirits_recognized))
-        await msg.answer(message)
-        draw_border_on_faces(healthy_spirits_list)
-        new_photo = FSInputFile("../new_photo.jpg")
-        await msg.answer_photo(new_photo)
-    except ValueError:
-        await msg.answer("Возникла ошибка, попробуйте ещё раз ")
+    healthy_spirits_list = mark_visit(user_data['date'])
+    healthy_spirits_string = ''
+    undefined_counter = 0
+    for healthy_spirit in healthy_spirits_list:
+        if healthy_spirit["person"] == 'UNDEFINED':
+            undefined_counter += 1
+            continue
+        healthy_spirits_string += healthy_spirit["person"] + "\n"
+    healthy_spirits_recognized = len(healthy_spirits_list)
+    healthy_spirits_seen = healthy_spirits_recognized - undefined_counter
+    message = ("Люди, посетившие зарядку:\n\n"
+               + healthy_spirits_string
+               + "\n"
+               + "Распознано: "
+               + str(healthy_spirits_seen)
+               + "/"
+               + str(healthy_spirits_recognized))
+    await msg.answer(message)
+    draw_border_on_faces(healthy_spirits_list)
+    new_photo = FSInputFile("../new_photo.jpg")
+    await msg.answer_photo(new_photo)
     os.remove("../new_photo.jpg")
     os.remove("../photo.jpg")
     await msg.answer(

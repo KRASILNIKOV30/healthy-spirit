@@ -66,7 +66,7 @@ def mark_visit(date=None):
     service = build('sheets', 'v4', http=http_auth)
     values = service.spreadsheets().values().get(
         spreadsheetId=config.spreadsheet_id,
-        range='зарядки 2 семестр!B1:ZZ69',
+        range=config.spreadsheet_range,
         majorDimension='ROWS'
     ).execute()['values']
 
@@ -84,7 +84,7 @@ def mark_visit(date=None):
         if person["person"] == 'UNDEFINED':
             continue
         records.append({
-            "range": 'зарядки 2 семестр!' + column + str(find_name_index(person["person"], values)),
+            "range": f"{config.spreadsheet_list}!" + column + str(find_name_index(person["person"], values)),
             "majorDimension": "ROWS",
             "values": [[1]],
         })
