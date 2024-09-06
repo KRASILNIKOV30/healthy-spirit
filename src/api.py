@@ -57,6 +57,23 @@ def set(id, file_name):
     return response
 
 
+def delete(ids):
+    images = list(map(lambda id: {"name": f"person{id}", "person_id": id}, ids))
+    print(images)
+    body = {
+        "url": f"https://smarty.mail.ru/api/v1/persons/delete?oauth_provider=mcs&oauth_token={config.TOKEN}",
+        "meta": {
+            "space": "1",
+            "images": images,
+        },
+        "verbose": True,
+        "timeout": 60,
+    }
+
+    response = json.loads(smarty.vk_api(body))
+    return response
+
+
 def mark_visit(date=None):
     credentials = ServiceAccountCredentials.from_json_keyfile_name(
         config.CREDENTIALS_FILE,
@@ -81,10 +98,14 @@ def mark_visit(date=None):
     records = list()
     persons = recognize("../photo.jpg")
     for person in persons:
-        if person["person"] == 'UNDEFINED':
+        person = person["person"]
+        if person == 'UNDEFINED':
             continue
+        row = str(find_name_index(person, values))
+        if row == 'None':
+            raise Exception(f"{person} not found")
         records.append({
-            "range": f"{config.spreadsheet_list}!" + column + str(find_name_index(person["person"], values)),
+            "range": f"{config.spreadsheet_list}!" + column + row,
             "majorDimension": "ROWS",
             "values": [[1]],
         })

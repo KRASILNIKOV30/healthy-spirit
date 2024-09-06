@@ -12,5 +12,3 @@ i = len(remap.tag_to_name)
 for file in files:
     print(api.set(i, f"{persons_dir}/{file}"))
     i += 1
-
-# print(api.recognize('../res/2022-2023/bogdan_krasilnikov.png'))

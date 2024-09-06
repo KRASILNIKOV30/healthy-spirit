@@ -120,14 +120,14 @@ def vk_api(args):
     meta = args["meta"]
     opts = opts_from_args(args)
 
-    if args["path"]:
+    if 'path' in args:
         print(f"Sending image: {args['path']}")
-        status_code, body = send_images(args["url"], meta, opts, [args["path"]], args["timeout"])
-    elif args.dir:
+        status_code, body = send_images(args['url'], meta, opts, [args["path"]], args["timeout"])
+    elif 'dir' in args:
         print("Sending images from directory: {}".format(args.dir))
-        status_code, body = send_images_from_dir(args.url, meta, opts, args.dir, args.timeout)
-    elif re.search("/.*persons/delete\?.*", args.url):
-        status_code, body = send_args_via_post(args.url, meta, opts, args.timeout)
+        status_code, body = send_images_from_dir(args['url'], meta, opts, args['dir'], args['timeout'])
+    elif re.search("/.*persons/delete\?.*", args['url']):
+        status_code, body = send_args_via_post(args['url'], meta, opts, args['timeout'])
     else:
         print("Need path to image or dir")
         sys.exit(1)
