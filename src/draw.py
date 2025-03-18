@@ -4,8 +4,9 @@ from PIL import Image, ImageDraw, ImageFont
 def draw_border_on_faces(persons):
     image = Image.open("../photo.jpg")
     draw = ImageDraw.Draw(image)
-    font_size = 40
-    font = ImageFont.truetype("./fonts/Roboto-Regular.ttf", font_size, encoding='UTF-8')
+    width, height = image.size
+    font_size = int(width / 80)
+    font = ImageFont.truetype("/home/bogdan.krasilnikov/projects/healthy-spirit/src/fonts/Roboto-Regular.ttf", font_size, encoding='UTF-8')
     for person in persons:
         if person["person"] == "UNDEFINED":
             color = 'red'
@@ -14,7 +15,7 @@ def draw_border_on_faces(persons):
             color = 'green'
             person_full_name = person["person"].split(' ')
             person_name = person_full_name[1]
-        draw.rectangle(person["coord"], outline=color, width=7)
+        draw.rectangle(person["coord"], outline=color, width=max(1, int(width / 400)))
 
         x = person["coord"][0] - 5
         y = person["coord"][3]
