@@ -83,7 +83,7 @@ def mark_visit(date=None):
     service = build('sheets', 'v4', http=http_auth)
     values = service.spreadsheets().values().get(
         spreadsheetId=config.spreadsheet_id,
-        range=config.spreadsheet_range,
+        range=f"{config.spreadsheet_list}!{config.spreadsheet_range}",
         majorDimension='ROWS'
     ).execute()['values']
 
