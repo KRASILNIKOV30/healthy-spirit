@@ -5,7 +5,7 @@ def draw_border_on_faces(persons):
     image = Image.open("../photo.jpg")
     draw = ImageDraw.Draw(image)
     width, height = image.size
-    font_size = int(width / 80)
+    font_size = int(width / 70)
     font = ImageFont.truetype("/home/bogdan.krasilnikov/projects/healthy-spirit/src/fonts/Roboto-Regular.ttf", font_size, encoding='UTF-8')
     for person in persons:
         if person["person"] == "UNDEFINED":
@@ -21,13 +21,16 @@ def draw_border_on_faces(persons):
         y = person["coord"][3]
 
         fill_color = "white"
-        stroke_color = "black"
         stroke_width = 3
 
-        draw.text((x - stroke_width, y - stroke_width), person_name, font=font, fill=stroke_color)
-        draw.text((x + stroke_width, y - stroke_width), person_name, font=font, fill=stroke_color)
-        draw.text((x - stroke_width, y + stroke_width), person_name, font=font, fill=stroke_color)
-        draw.text((x + stroke_width, y + stroke_width), person_name, font=font, fill=stroke_color)
+        bbox = draw.textbbox((x, y), person_name, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+
+        draw.rectangle(
+            [(x - stroke_width, y - stroke_width), (x + text_width + stroke_width, y + text_height + stroke_width)],
+            fill="black"
+        )
 
         draw.text((x, y), person_name, font=font, fill=fill_color)
     image.save("../new_photo.jpg")
