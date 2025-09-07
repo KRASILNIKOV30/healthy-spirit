@@ -10,9 +10,9 @@ from converter import number_to_string
 import os
 
 
-def find_name_index(name, array):
+def find_name_index(name: str, array: list[str]):
     for value in array:
-        if value and value[0] == name:
+        if value and value[0].strip() == name:
             return array.index(value) + 1
 
 
