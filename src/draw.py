@@ -1,8 +1,9 @@
 from PIL import Image, ImageDraw, ImageFont
 
 
-def draw_border_on_faces(persons):
-    image = Image.open("../photo.jpg")
+def draw_border_on_faces(persons, photo_path):
+    print(photo_path)
+    image = Image.open(photo_path)
     draw = ImageDraw.Draw(image)
     width, height = image.size
     font_size = int(width / 70)
@@ -33,4 +34,8 @@ def draw_border_on_faces(persons):
         )
 
         draw.text((x, y), person_name, font=font, fill=fill_color)
-    image.save("../new_photo.jpg")
+    ext = photo_path.split('.')[-1].lower()
+    output_path = f"./new_photo.{ext}"
+    image.save(output_path)
+    return output_path
+

@@ -16,6 +16,7 @@ from aiogram.types import FSInputFile
 from PIL import Image
 from PIL.ExifTags import TAGS
 from datetime import datetime
+import pillow_heif
 
 
 class Uploading(StatesGroup):
@@ -40,28 +41,54 @@ async def document_handler(msg: Message, state: FSMContext):
     if not msg.document:
         await msg.answer("Пожалуйста, отправьте фото именно как документ (файл), чтобы сохранились метаданные.")
         return
-
+    
     file = await bot.get_file(msg.document.file_id)
+    ext = file.file_path.split('.')[-1].lower()
+    
+    original_photo_path = f"./photo.{ext}"
     response = requests.get("https://api.telegram.org/file/bot" + config.BOT_TOKEN + "/" + file.file_path)
-
-    photo_path = "../photo.jpg"
-    with open(photo_path, "wb") as f:
+    with open(original_photo_path, "wb") as f:
         f.write(response.content)
+
+    processing_photo_path = original_photo_path
+    
+    if ext in ('heic', 'heif'):
+        await msg.answer("Обнаружен формат HEIC. Конвертирую в JPEG...")
+        
+        jpeg_path = "./photo.jpg"
+        
+        heif_file = pillow_heif.read_heif(original_photo_path)
+        
+        image = Image.frombytes(
+            heif_file.mode,
+            heif_file.size,
+            heif_file.data,
+            "raw",
+        )
+
+        exif_data = heif_file.info.get('exif', None)
+        image.save(jpeg_path, "JPEG", quality=95, exif=exif_data)
+        processing_photo_path = jpeg_path     
+        os.remove(original_photo_path)
 
     photo_date = None
     try:
-        image = Image.open(photo_path)
+        image = Image.open(processing_photo_path)
         exif_data = image.getexif()
 
         if exif_data:
-            date_tag_code = None
-            for tag, value in TAGS.items():
-                if value == 'DateTimeOriginal':
-                    date_tag_code = tag
-                    break
+            date_str = None
+            possible_date_tags = [36867, 36868, 306]
 
-            if date_tag_code and date_tag_code in exif_data:
-                date_str = exif_data[date_tag_code]
+            for tag_code in possible_date_tags:
+                if tag_code in exif_data:
+                    date_str = exif_data[tag_code]
+                    break 
+
+            if date_str:
+                if isinstance(date_str, bytes):
+                    date_str = date_str.decode('utf-8', 'ignore').strip()
+                
                 dt_object = datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
 
                 if os.name == 'nt':
@@ -81,7 +108,7 @@ async def document_handler(msg: Message, state: FSMContext):
 
     await msg.answer("Фото получено, начинаю распознавание...")
 
-    healthy_spirits_list = mark_visit(photo_date)
+    healthy_spirits_list = mark_visit(processing_photo_path, photo_date)
     healthy_spirits_string = ''
     undefined_counter = 0
     for healthy_spirit in healthy_spirits_list:
@@ -100,12 +127,12 @@ async def document_handler(msg: Message, state: FSMContext):
                + str(healthy_spirits_recognized))
     await msg.answer(message)
 
-    draw_border_on_faces(healthy_spirits_list)
-    new_photo = FSInputFile("../new_photo.jpg")
+    new_photo_path = draw_border_on_faces(healthy_spirits_list, processing_photo_path)
+    new_photo = FSInputFile(new_photo_path)
     await msg.answer_photo(new_photo)
 
-    os.remove("../new_photo.jpg")
-    os.remove("../photo.jpg")
+    os.remove(new_photo_path)
+    os.remove(processing_photo_path)
 
     await msg.answer("Обработка завершена. Можете отправить следующее фото.")
     await state.set_state(Uploading.waiting_photo)

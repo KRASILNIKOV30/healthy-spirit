@@ -29,6 +29,7 @@ def recognize(file_name) -> list:
     }
 
     response = json.loads(smarty.vk_api(body))
+    print(response)
     persons = response["body"]["objects"][0]["persons"]
     spirits = list()
     for person in persons:
@@ -74,7 +75,7 @@ def delete(ids):
     return response
 
 
-def mark_visit(date=None):
+def mark_visit(photo_path, date=None):
     credentials = ServiceAccountCredentials.from_json_keyfile_name(
         config.CREDENTIALS_FILE,
         ['https://www.googleapis.com/auth/spreadsheets',
@@ -96,7 +97,7 @@ def mark_visit(date=None):
     column = number_to_string(values[1].index(date) + 2)
 
     records = list()
-    persons = recognize("../photo.jpg")
+    persons = recognize(photo_path)
     for person in persons:
         person = person["person"]
         if person == 'UNDEFINED':
