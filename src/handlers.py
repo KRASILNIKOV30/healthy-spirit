@@ -11,17 +11,117 @@ import os
 from api import mark_visit
 from kb import make_upload_button
 from draw import draw_border_on_faces
-from aiogram.types import FSInputFile
+from aiogram.types import FSInputFile, Document
 
 from PIL import Image
 from PIL.ExifTags import TAGS
 from datetime import datetime
+from typing import Optional, Tuple, List
 import pillow_heif
 
 
 class Uploading(StatesGroup):
     waiting_photo = State()
 
+async def download_photo(document: Document) -> Tuple[str, str]:
+    """Скачивает фото из сообщения и возвращает путь и расширение."""
+    file = await bot.get_file(document.file_id)
+    ext = file.file_path.split('.')[-1].lower()
+    
+    photo_path = f"./photo.{ext}"
+    response = requests.get(f"https://api.telegram.org/file/bot{config.BOT_TOKEN}/{file.file_path}")
+    response.raise_for_status() 
+    
+    with open(photo_path, "wb") as f:
+        f.write(response.content)
+        
+    return photo_path, ext
+
+
+async def convert_heic_to_jpeg_if_needed(original_path: str, ext: str, msg: Message) -> str:
+    """Конвертирует HEIC в JPEG, если необходимо, и возвращает путь к итоговому файлу."""
+    if ext not in ('heic', 'heif'):
+        return original_path
+
+    await msg.answer("Обнаружен формат HEIC. Конвертирую в JPEG...")
+    jpeg_path = "./photo.jpg"
+    
+    heif_file = pillow_heif.read_heif(original_path)
+    image = Image.frombytes(
+        heif_file.mode, heif_file.size, heif_file.data, "raw"
+    )
+
+    exif_data = heif_file.info.get('exif')
+    image.save(jpeg_path, "JPEG", quality=95, exif=exif_data)
+    
+    os.remove(original_path)
+    return jpeg_path
+
+
+async def extract_and_report_date(photo_path: str, msg: Message) -> Optional[str]:
+    """Извлекает дату из EXIF, сообщает пользователю и возвращает дату в виде строки."""
+    try:
+        image = Image.open(photo_path)
+        exif_data = image.getexif()
+
+        if not exif_data:
+            await msg.answer("Метаданные (EXIF) в фото отсутствуют. Использую сегодняшнюю дату.")
+            return None
+
+        possible_date_tags = [36867, 36868, 306]
+        date_str = next((exif_data.get(tag) for tag in possible_date_tags if exif_data.get(tag)), None)
+
+        if not date_str:
+            await msg.answer("Не удалось найти дату в метаданных фото. Использую сегодняшнюю дату.")
+            return None
+        
+        if isinstance(date_str, bytes):
+            date_str = date_str.decode('utf-8', 'ignore').strip()
+            
+        dt_object = datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
+        date_format = '%#d-%b-%Y' if os.name == 'nt' else '%-d-%b-%Y'
+        photo_date = dt_object.strftime(date_format)
+
+        await msg.answer(f"Дата определена из фото: {photo_date}")
+        return photo_date
+
+    except Exception as e:
+        print(f"Ошибка при чтении EXIF: {e}")
+        await msg.answer("Ошибка при чтении метаданных фото. Использую сегодняшнюю дату.")
+        return None
+
+
+async def process_and_reply_with_results(photo_path: str, photo_date: Optional[str], msg: Message):
+    """Распознает лица, форматирует результат, отправляет текст и фото с рамками."""
+    await msg.answer("Фото получено, начинаю распознавание...")
+
+    healthy_spirits_list = mark_visit(photo_path, photo_date)
+    
+    recognized_names = [p["person"] for p in healthy_spirits_list if p["person"] != 'UNDEFINED']
+    total_recognized = len(healthy_spirits_list)
+    found_count = len(recognized_names)
+    
+    message_text = (
+        "Люди, посетившие зарядку:\n\n"
+        + "\n".join(recognized_names)
+        + f"\n\nРаспознано: {found_count}/{total_recognized}"
+    )
+    await msg.answer(message_text)
+
+    new_photo_path = draw_border_on_faces(healthy_spirits_list, photo_path)
+    new_photo = FSInputFile(new_photo_path)
+    await msg.answer_photo(new_photo)
+    return new_photo_path
+
+
+def cleanup_files(files_to_delete: List[str]):
+    """Удаляет список временных файлов."""
+    for file_path in files_to_delete:
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except OSError as e:
+            print(f"Ошибка при удалении файла {file_path}: {e}")
 
 @dp.message(default_state, Command("start"))
 async def start_handler(msg: Message, state: FSMContext):
@@ -38,101 +138,28 @@ async def start_handler(msg: Message, state: FSMContext):
 
 @dp.message(Uploading.waiting_photo)
 async def document_handler(msg: Message, state: FSMContext):
+    """Главный хендлер, координирующий весь процесс обработки фото."""
     if not msg.document:
-        await msg.answer("Пожалуйста, отправьте фото именно как документ (файл), чтобы сохранились метаданные.")
+        await msg.answer("Пожалуйста, отправьте фото именно как документ (файл).")
         return
     
-    file = await bot.get_file(msg.document.file_id)
-    ext = file.file_path.split('.')[-1].lower()
-    
-    original_photo_path = f"./photo.{ext}"
-    response = requests.get("https://api.telegram.org/file/bot" + config.BOT_TOKEN + "/" + file.file_path)
-    with open(original_photo_path, "wb") as f:
-        f.write(response.content)
-
-    processing_photo_path = original_photo_path
-    
-    if ext in ('heic', 'heif'):
-        await msg.answer("Обнаружен формат HEIC. Конвертирую в JPEG...")
-        
-        jpeg_path = "./photo.jpg"
-        
-        heif_file = pillow_heif.read_heif(original_photo_path)
-        
-        image = Image.frombytes(
-            heif_file.mode,
-            heif_file.size,
-            heif_file.data,
-            "raw",
-        )
-
-        exif_data = heif_file.info.get('exif', None)
-        image.save(jpeg_path, "JPEG", quality=95, exif=exif_data)
-        processing_photo_path = jpeg_path     
-        os.remove(original_photo_path)
-
-    photo_date = None
+    processing_photo_path = None
+    new_photo_path = None
     try:
-        image = Image.open(processing_photo_path)
-        exif_data = image.getexif()
+        original_photo_path, ext = await download_photo(msg.document)
+        processing_photo_path = await convert_heic_to_jpeg_if_needed(original_photo_path, ext, msg)
 
-        if exif_data:
-            date_str = None
-            possible_date_tags = [36867, 36868, 306]
+        photo_date = await extract_and_report_date(processing_photo_path, msg)
 
-            for tag_code in possible_date_tags:
-                if tag_code in exif_data:
-                    date_str = exif_data[tag_code]
-                    break 
-
-            if date_str:
-                if isinstance(date_str, bytes):
-                    date_str = date_str.decode('utf-8', 'ignore').strip()
-                
-                dt_object = datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
-
-                if os.name == 'nt':
-                    photo_date = dt_object.strftime('%#d-%b-%Y')
-                else:
-                    photo_date = dt_object.strftime('%-d-%b-%Y')
-
-                await msg.answer(f"Дата определена из фото: {photo_date}")
-            else:
-                await msg.answer("Не удалось найти дату в метаданных фото. Использую сегодняшнюю дату.")
-        else:
-            await msg.answer("Метаданные (EXIF) в фото отсутствуют. Использую сегодняшнюю дату.")
+        new_photo_path = await process_and_reply_with_results(processing_photo_path, photo_date, msg)
 
     except Exception as e:
-        print(f"Ошибка при чтении EXIF: {e}")
-        await msg.answer(f"Ошибка при чтении метаданных фото. Использую сегодняшнюю дату.")
-
-    await msg.answer("Фото получено, начинаю распознавание...")
-
-    healthy_spirits_list = mark_visit(processing_photo_path, photo_date)
-    healthy_spirits_string = ''
-    undefined_counter = 0
-    for healthy_spirit in healthy_spirits_list:
-        if healthy_spirit["person"] == 'UNDEFINED':
-            undefined_counter += 1
-            continue
-        healthy_spirits_string += healthy_spirit["person"] + "\n"
-    healthy_spirits_recognized = len(healthy_spirits_list)
-    healthy_spirits_seen = healthy_spirits_recognized - undefined_counter
-    message = ("Люди, посетившие зарядку:\n\n"
-               + healthy_spirits_string
-               + "\n"
-               + "Распознано: "
-               + str(healthy_spirits_seen)
-               + "/"
-               + str(healthy_spirits_recognized))
-    await msg.answer(message)
-
-    new_photo_path = draw_border_on_faces(healthy_spirits_list, processing_photo_path)
-    new_photo = FSInputFile(new_photo_path)
-    await msg.answer_photo(new_photo)
-
-    os.remove(new_photo_path)
-    os.remove(processing_photo_path)
+        print(f"Произошла общая ошибка в document_handler: {e}")
+        await msg.answer("Произошла непредвиденная ошибка при обработке фото. Попробуйте еще раз.")
+    finally:
+        files_to_clean = [path for path in [processing_photo_path, new_photo_path] if path]
+        if files_to_clean:
+            cleanup_files(files_to_clean)
 
     await msg.answer("Обработка завершена. Можете отправить следующее фото.")
     await state.set_state(Uploading.waiting_photo)

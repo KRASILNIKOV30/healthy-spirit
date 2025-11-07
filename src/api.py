@@ -29,7 +29,6 @@ def recognize(file_name) -> list:
     }
 
     response = json.loads(smarty.vk_api(body))
-    print(response)
     persons = response["body"]["objects"][0]["persons"]
     spirits = list()
     for person in persons:
