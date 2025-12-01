@@ -13,12 +13,13 @@ from kb import make_upload_button
 from draw import draw_border_on_faces
 from aiogram.types import FSInputFile, Document
 
-from PIL import Image
+from PIL import Image, ImageOps
 from PIL.ExifTags import TAGS
 from datetime import datetime
 from typing import Optional, Tuple, List
 import pillow_heif
 
+pillow_heif.register_heif_opener()
 
 class Uploading(StatesGroup):
     waiting_photo = State()
@@ -37,22 +38,26 @@ async def download_photo(document: Document) -> Tuple[str, str]:
         
     return photo_path, ext
 
-
 async def convert_heic_to_jpeg_if_needed(original_path: str, ext: str, msg: Message) -> str:
-    """Конвертирует HEIC в JPEG, если необходимо, и возвращает путь к итоговому файлу."""
+    """Конвертирует HEIC в JPEG с учетом поворота."""
     if ext not in ('heic', 'heif'):
         return original_path
 
     await msg.answer("Обнаружен формат HEIC. Конвертирую в JPEG...")
     jpeg_path = "./photo.jpg"
     
-    heif_file = pillow_heif.read_heif(original_path)
-    image = Image.frombytes(
-        heif_file.mode, heif_file.size, heif_file.data, "raw"
-    )
-
-    exif_data = heif_file.info.get('exif')
-    image.save(jpeg_path, "JPEG", quality=95, exif=exif_data)
+    try:
+        image = Image.open(original_path)
+        image = ImageOps.exif_transpose(image)
+        exif_obj = image.getexif()
+        if exif_obj:
+            image.save(jpeg_path, "JPEG", quality=95, exif=exif_obj.tobytes())
+        else:
+            image.save(jpeg_path, "JPEG", quality=95)
+            
+    except Exception as e:
+        await msg.answer(f"Ошибка при конвертации: {e}")
+        return original_path
     
     os.remove(original_path)
     return jpeg_path

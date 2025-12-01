@@ -28,16 +28,33 @@ def recognize(file_name) -> list:
         "timeout": 60,
     }
 
-    response = json.loads(smarty.vk_api(body))
-    persons = response["body"]["objects"][0]["persons"]
-    spirits = list()
+    try:
+        response = json.loads(smarty.vk_api(body))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Невалидный JSON ответ от VK API: {e}")
+    
+    if response.get("status") != 200:
+        raise ValueError(f"Ошибка VK API: status {response.get('status', 'unknown')}")
+    
+    body_data = response.get("body", {})
+    objects = body_data.get("objects", [])
+    
+    if not objects:
+        raise ValueError("Пустой массив objects в ответе VK API")
+    
+    first_object = objects[0]
+    
+    if first_object.get("status") != 0:
+        raise ValueError(f"Ошибка обработки файла: status {first_object.get('status')}")
+    
+    persons = first_object.get("persons", [])
+    spirits = []
     for person in persons:
-        spirits.append(
-            {
-                'person': remap.tag_to_name[person["tag"]],
-                'coord': person["coord"]
-            }
-        )
+        spirits.append({
+            'person': remap.tag_to_name[person["tag"]],
+            'coord': person["coord"]
+        })
+
     return spirits
 
 
