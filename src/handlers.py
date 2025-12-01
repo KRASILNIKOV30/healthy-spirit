@@ -23,6 +23,7 @@ pillow_heif.register_heif_opener()
 
 class Uploading(StatesGroup):
     waiting_photo = State()
+    waiting_date = State()
 
 async def download_photo(document: Document) -> Tuple[str, str]:
     """Скачивает фото из сообщения и возвращает путь и расширение."""
@@ -64,20 +65,18 @@ async def convert_heic_to_jpeg_if_needed(original_path: str, ext: str, msg: Mess
 
 
 async def extract_and_report_date(photo_path: str, msg: Message) -> Optional[str]:
-    """Извлекает дату из EXIF, сообщает пользователю и возвращает дату в виде строки."""
+    """Извлекает дату из EXIF. Возвращает None, если дата не найдена."""
     try:
         image = Image.open(photo_path)
         exif_data = image.getexif()
 
         if not exif_data:
-            await msg.answer("Метаданные (EXIF) в фото отсутствуют. Использую сегодняшнюю дату.")
             return None
 
         possible_date_tags = [36867, 36868, 306]
         date_str = next((exif_data.get(tag) for tag in possible_date_tags if exif_data.get(tag)), None)
 
         if not date_str:
-            await msg.answer("Не удалось найти дату в метаданных фото. Использую сегодняшнюю дату.")
             return None
         
         if isinstance(date_str, bytes):
@@ -92,15 +91,18 @@ async def extract_and_report_date(photo_path: str, msg: Message) -> Optional[str
 
     except Exception as e:
         print(f"Ошибка при чтении EXIF: {e}")
-        await msg.answer("Ошибка при чтении метаданных фото. Использую сегодняшнюю дату.")
         return None
 
 
-async def process_and_reply_with_results(photo_path: str, photo_date: Optional[str], msg: Message):
+async def process_and_reply_with_results(photo_path: str, photo_date: str, msg: Message):
     """Распознает лица, форматирует результат, отправляет текст и фото с рамками."""
-    await msg.answer("Фото получено, начинаю распознавание...")
+    await msg.answer(f"Обрабатываю фото за дату: {photo_date}\nНачинаю распознавание...")
 
-    healthy_spirits_list = mark_visit(photo_path, photo_date)
+    try:
+        healthy_spirits_list = mark_visit(photo_path, photo_date)
+    except Exception as e:
+        await msg.answer(f"Ошибка при отметке в таблице (проверьте формат даты или наличие колонки): {e}")
+        return None
     
     recognized_names = [p["person"] for p in healthy_spirits_list if p["person"] != 'UNDEFINED']
     total_recognized = len(healthy_spirits_list)
@@ -143,28 +145,72 @@ async def start_handler(msg: Message, state: FSMContext):
 
 @dp.message(Uploading.waiting_photo)
 async def document_handler(msg: Message, state: FSMContext):
-    """Главный хендлер, координирующий весь процесс обработки фото."""
+    """Принимает фото, пытается найти дату."""
     if not msg.document:
         await msg.answer("Пожалуйста, отправьте фото именно как документ (файл).")
         return
     
     processing_photo_path = None
-    new_photo_path = None
     try:
         original_photo_path, ext = await download_photo(msg.document)
         processing_photo_path = await convert_heic_to_jpeg_if_needed(original_photo_path, ext, msg)
 
         photo_date = await extract_and_report_date(processing_photo_path, msg)
 
-        new_photo_path = await process_and_reply_with_results(processing_photo_path, photo_date, msg)
+        if photo_date:
+            new_photo_path = await process_and_reply_with_results(processing_photo_path, photo_date, msg)
+            if new_photo_path:
+                cleanup_files([processing_photo_path, new_photo_path])
+            else:
+                cleanup_files([processing_photo_path])
+            
+            await msg.answer("Обработка завершена. Можете отправить следующее фото.")
+            await state.set_state(Uploading.waiting_photo)
+        
+        else:
+            await msg.answer("Не удалось найти дату в метаданных.\n"
+                             "Пожалуйста, введите дату вручную в формате <b>1-Jan-2025</b>:", parse_mode="HTML")
+            await state.update_data(photo_path=processing_photo_path)
+            await state.set_state(Uploading.waiting_date)
 
     except Exception as e:
-        print(f"Произошла общая ошибка в document_handler: {e}")
-        await msg.answer("Произошла непредвиденная ошибка при обработке фото. Попробуйте еще раз.")
-    finally:
-        files_to_clean = [path for path in [processing_photo_path, new_photo_path] if path]
-        if files_to_clean:
-            cleanup_files(files_to_clean)
+        print(f"Произошла ошибка в document_handler: {e}")
+        await msg.answer("Произошла ошибка при обработке фото. Попробуйте еще раз.")
+        if processing_photo_path:
+            cleanup_files([processing_photo_path])
+        await state.set_state(Uploading.waiting_photo)
 
-    await msg.answer("Обработка завершена. Можете отправить следующее фото.")
-    await state.set_state(Uploading.waiting_photo)
+
+@dp.message(Uploading.waiting_date)
+async def manual_date_handler(msg: Message, state: FSMContext):
+    """Обрабатывает введенную вручную дату."""
+    input_date = msg.text.strip()
+    
+    try:
+        datetime.strptime(input_date, "%d-%b-%Y")
+    except ValueError:
+        await msg.answer("Неверный формат даты.\nПожалуйста, используйте формат <b>1-Jan-2025</b> (например: 1-Dec-2024):", parse_mode="HTML")
+        return
+
+    data = await state.get_data()
+    photo_path = data.get('photo_path')
+
+    if not photo_path or not os.path.exists(photo_path):
+        await msg.answer("Файл фото потерян. Пожалуйста, загрузите фото заново.")
+        await state.clear()
+        await state.set_state(Uploading.waiting_photo)
+        return
+
+    new_photo_path = None
+    try:
+        new_photo_path = await process_and_reply_with_results(photo_path, input_date, msg)
+        await msg.answer("Обработка завершена. Можете отправить следующее фото.")
+    except Exception as e:
+        print(f"Ошибка при обработке с ручной датой: {e}")
+        await msg.answer("Произошла ошибка при обработке. Попробуйте загрузить фото заново.")
+    finally:
+        files_to_clean = [path for path in [photo_path, new_photo_path] if path]
+        cleanup_files(files_to_clean)
+        
+        await state.clear()
+        await state.set_state(Uploading.waiting_photo)
