@@ -7,7 +7,10 @@ def draw_border_on_faces(persons, photo_path):
     draw = ImageDraw.Draw(image)
     width, height = image.size
     font_size = int(width / 70)
-    font = ImageFont.truetype("/home/bogdan.krasilnikov/projects/healthy-spirit/src/fonts/Roboto-Regular.ttf", font_size, encoding='UTF-8')
+
+    file_path = "../src/fonts/Roboto-Regular.ttf"
+
+    font = ImageFont.truetype(file_path, font_size, encoding='UTF-8')
     for person in persons:
         if person["person"] == "UNDEFINED":
             color = 'red'
