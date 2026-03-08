@@ -25,21 +25,25 @@ class Uploading(StatesGroup):
     waiting_photo = State()
     waiting_date = State()
 
-async def download_photo(document: Document) -> Tuple[str, str]:
-    """Скачивает фото из сообщения и возвращает путь и расширение."""
+
+async def download_photo(document: Document) -> Tuple[str, str, str]:
+    """Скачивает фото из сообщения и возвращает путь, расширение и оригинальное имя."""
     file = await bot.get_file(document.file_id)
     ext = file.file_path.split('.')[-1].lower()
-    
+
+    original_filename = document.file_name
+
     photo_path = f"./photo.{ext}"
+
     response = requests.get(f"https://api.telegram.org/file/bot{config.BOT_TOKEN}/{file.file_path}")
-    response.raise_for_status() 
-    
+    response.raise_for_status()
+
     with open(photo_path, "wb") as f:
         f.write(response.content)
-        
-    return photo_path, ext
 
-async def convert_heic_to_jpeg_if_needed(original_path: str, ext: str, msg: Message) -> str:
+    return photo_path, ext, original_filename
+
+async def convert_heic_to_jpeg_if_needed(original_path: str, ext: str, msg: Message) -> Optional[str]:
     """Конвертирует HEIC в JPEG с учетом поворота."""
     if ext not in ('heic', 'heif'):
         return original_path
@@ -64,9 +68,40 @@ async def convert_heic_to_jpeg_if_needed(original_path: str, ext: str, msg: Mess
     return jpeg_path
 
 
-async def extract_and_report_date(photo_path: str, msg: Message) -> Optional[str]:
-    """Извлекает дату из EXIF. Возвращает None, если дата не найдена."""
+def extract_date_from_filename(filename: str) -> Optional[str]:
+    """Из photo_2026-03-04_08-05-23.jpg делает 4-Mar-2026, стандартный формат телеграмма"""
+    DATE_MIN_PLACE = 6
+    DATE_MAX_PLACE = 16
+    MONTHS = {
+        '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr',
+        '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Aug',
+        '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec'
+    }
     try:
+        date_part = filename[DATE_MIN_PLACE:DATE_MAX_PLACE]
+        year, month, day = date_part.split('-')
+
+        day_int = int(day)
+        month_int = int(month)
+        year_int = int(year)
+
+        month_str = f"{month_int:02d}"
+        if month_str not in MONTHS:
+            return None
+
+        return f"{day_int}-{MONTHS[month_str]}-{year_int}"
+
+    except (IndexError, ValueError, KeyError):
+        return None
+
+
+async def extract_and_report_date(photo_path: str, filename: str, msg: Message) -> Optional[str]:
+    """Извлекает дату из названия, если не нашла в названии, то из EXIF. Возвращает None, если дата не найдена."""
+    try:
+        filename = extract_date_from_filename(filename)
+        if filename != None:
+            return filename
+
         image = Image.open(photo_path)
         exif_data = image.getexif()
 
@@ -152,10 +187,10 @@ async def document_handler(msg: Message, state: FSMContext):
     
     processing_photo_path = None
     try:
-        original_photo_path, ext = await download_photo(msg.document)
+        original_photo_path, ext, original_filename = await download_photo(msg.document)
         processing_photo_path = await convert_heic_to_jpeg_if_needed(original_photo_path, ext, msg)
 
-        photo_date = await extract_and_report_date(processing_photo_path, msg)
+        photo_date = await extract_and_report_date(processing_photo_path, original_filename, msg)
 
         if photo_date:
             new_photo_path = await process_and_reply_with_results(processing_photo_path, photo_date, msg)
