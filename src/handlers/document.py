@@ -1,23 +1,15 @@
 from aiogram.types import Message, Document
-from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from src.misc import dp, bot
-from aiogram.types import FSInputFile
 from src import config
-from src.api import mark_visit
-from src.draw import draw_border_on_faces
 from PIL import Image, ImageOps
 from datetime import datetime
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 import requests
 import os
 import pillow_heif
+from .common import Uploading, cleanup_files
 pillow_heif.register_heif_opener()
-
-class Uploading(StatesGroup):
-    waiting_photo = State()
-    waiting_date = State()
-    waiting_confirmation = State()
 
 async def download_photo(document: Document) -> Tuple[str, str, str]:
     """Скачивает фото из сообщения и возвращает путь, расширение и оригинальное имя."""
@@ -93,16 +85,6 @@ async def extract_and_report_date(photo_path: str, filename: str, msg: Message) 
     except Exception as e:
         print(f"Ошибка при чтении EXIF: {e}")
         return None
-
-
-def cleanup_files(files_to_delete: List[str]):
-    """Удаляет список временных файлов."""
-    for file_path in files_to_delete:
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        except OSError as e:
-            print(f"Ошибка при удалении файла {file_path}: {e}")
 
 
 @dp.message(Uploading.waiting_photo)

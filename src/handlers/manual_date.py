@@ -3,7 +3,7 @@ from aiogram.fsm.context import FSMContext
 from src.misc import dp
 from datetime import datetime
 import os
-from .document import Uploading, process_and_reply_with_results, cleanup_files
+from .common import process_and_reply_with_results, Uploading, cleanup_files
 
 
 @dp.message(Uploading.waiting_date)
