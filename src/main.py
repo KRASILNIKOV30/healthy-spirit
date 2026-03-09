@@ -1,13 +1,11 @@
-import misc
-import handlers
 import asyncio
 import logging
-
+from src.misc import dp, bot
+from src.handlers import start, document, confirmation_date, manual_date
 
 async def main():
-    await misc.bot.delete_webhook(drop_pending_updates=True)
-    await misc.dp.start_polling(misc.bot, allowed_updates=misc.dp.resolve_used_update_types())
-
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
