@@ -227,7 +227,7 @@ async def processing_photo(processing_photo_path: str, photo_date: str, msg: Mes
     cleanup_files(files_to_clean)
 
 @dp.message(Uploading.waiting_confirmation)
-async def manual_date_handler(msg: Message, state: FSMContext):
+async def confirmation_date_handler(msg: Message, state: FSMContext):
     input_text = msg.text.strip().lower()
     data = await state.get_data()
     if input_text == "ok":
