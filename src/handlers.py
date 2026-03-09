@@ -71,26 +71,22 @@ async def convert_heic_to_jpeg_if_needed(original_path: str, ext: str, msg: Mess
 
 def extract_date_from_filename(filename: str) -> Optional[str]:
     """Из photo_2026-03-04_08-05-23.jpg делает 4-Mar-2026, стандартный формат телеграмма"""
-    DATE_MIN_PLACE = 6
-    DATE_MAX_PLACE = 16
     MONTHS = {
         '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr',
         '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Aug',
         '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec'
     }
     try:
-        date_part = filename[DATE_MIN_PLACE:DATE_MAX_PLACE]
+        DATE_PLACE_AFTER_SPLIT = 1
+        date_part = (filename.split('_'))[DATE_PLACE_AFTER_SPLIT]
         year, month, day = date_part.split('-')
 
         day_int = int(day)
-        month_int = int(month)
-        year_int = int(year)
 
-        month_str = f"{month_int:02d}"
-        if month_str not in MONTHS:
+        if month not in MONTHS:
             return None
 
-        return f"{day_int}-{MONTHS[month_str]}-{year_int}"
+        return f"{day_int}-{MONTHS[month]}-{year}"
 
     except (IndexError, ValueError, KeyError):
         return None
@@ -99,9 +95,9 @@ def extract_date_from_filename(filename: str) -> Optional[str]:
 async def extract_and_report_date(photo_path: str, filename: str, msg: Message) -> Optional[str]:
     """Извлекает дату из названия, если не нашла в названии, то из EXIF. Возвращает None, если дата не найдена."""
     try:
-        filename = extract_date_from_filename(filename)
-        if filename != None:
-            return filename
+        photo_date = extract_date_from_filename(filename)
+        if photo_date != None:
+            return photo_date
 
         image = Image.open(photo_path)
         exif_data = image.getexif()
@@ -191,14 +187,15 @@ async def document_handler(msg: Message, state: FSMContext):
         processing_photo_path = await convert_heic_to_jpeg_if_needed(original_photo_path, ext, msg)
 
         photo_date = await extract_and_report_date(processing_photo_path, original_filename, msg)
-
+        CONFIRM_ANSWER = "ok"
         if photo_date:
             await state.update_data(
                 photo_path=processing_photo_path,
-                photo_date=photo_date
+                photo_date=photo_date,
+                confirm_answer=CONFIRM_ANSWER
             )
             await msg.answer(f"Обнаружена дата фото: <b>{photo_date}</b>.\n"
-                             "Введите <b>\"ok\"</b>, чтобы подтвердить дату или отправьте другую в формате: <b>1-Jan-2025</b>", parse_mode="HTML")
+                             f"Введите <b>\"{CONFIRM_ANSWER}\"</b>, чтобы подтвердить дату или отправьте другую в формате: <b>1-Jan-2025</b>", parse_mode="HTML")
             await state.set_state(Uploading.waiting_confirmation)
         else:
             await msg.answer("Не удалось найти дату в метаданных.\n"
@@ -214,7 +211,7 @@ async def document_handler(msg: Message, state: FSMContext):
         await state.set_state(Uploading.waiting_photo)
 
 
-async def processing_photo(processing_photo_path: str, photo_date: str, msg: Message, state: FSMContext):
+async def photo_pipeline(processing_photo_path: str, photo_date: str, msg: Message, state: FSMContext):
     new_photo_path = await process_and_reply_with_results(processing_photo_path, photo_date, msg)
     if new_photo_path:
         cleanup_files([processing_photo_path, new_photo_path])
@@ -228,10 +225,12 @@ async def processing_photo(processing_photo_path: str, photo_date: str, msg: Mes
 
 @dp.message(Uploading.waiting_confirmation)
 async def confirmation_date_handler(msg: Message, state: FSMContext):
+    data = await state.get_data()
+    CONFIRM_ANSWER = data.get("confirm_answer")
     input_text = msg.text.strip().lower()
     data = await state.get_data()
-    if input_text == "ok":
-        await processing_photo(data["photo_path"], data["photo_date"], msg, state)
+    if input_text == CONFIRM_ANSWER:
+        await photo_pipeline(data["photo_path"], data["photo_date"], msg, state)
     else:
         await manual_date_handler(msg, state)
 
