@@ -7,7 +7,7 @@ from src.misc import dp
 pillow_heif.register_heif_opener()
 
 
-async def photo_pipeline(processing_photo_path: str, photo_date: str, msg: Message, state: FSMContext):
+async def mark_people_and_send_photo(processing_photo_path: str, photo_date: str, msg: Message, state: FSMContext):
     new_photo_path = await process_and_reply_with_results(processing_photo_path, photo_date, msg)
     if new_photo_path:
         cleanup_files([processing_photo_path, new_photo_path])
@@ -26,6 +26,6 @@ async def confirmation_date_handler(msg: Message, state: FSMContext):
     input_text = msg.text.strip().lower()
     data = await state.get_data()
     if input_text == CONFIRM_ANSWER:
-        await photo_pipeline(data["photo_path"], data["photo_date"], msg, state)
+        await mark_people_and_send_photo(data["photo_path"], data["photo_date"], msg, state)
     else:
         await manual_date_handler(msg, state)
